@@ -1,0 +1,57 @@
+name: cbox-iiot
+
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: mosquitto
+    restart: unless-stopped
+    ports:
+      - "1883:1883"            # CBOX connects to 192.168.1.200:1883
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro,Z
+      - ${MOSQUITTO_DATA_DIR:-./data/mosquitto}:/mosquitto/data:Z
+
+  postgres:
+    image: postgres:16
+    container_name: cbox-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-cbox_db}
+      POSTGRES_USER: ${DB_USER:-cbox}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      TZ: Asia/Colombo
+    ports:
+      - "5432:5432"
+    volumes:
+      - ${PG_DATA_DIR:-./data/postgres}:/var/lib/postgresql/data:Z
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro,Z
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-cbox} -d ${DB_NAME:-cbox_db}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  bridge:
+    build: ./bridge
+    container_name: cbox-bridge
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mosquitto:
+        condition: service_started
+    environment:
+      MQTT_HOST: mosquitto
+      MQTT_PORT: 1883
+      MQTT_USER: ${MQTT_USER:-}
+      MQTT_PASSWORD: ${MQTT_PASSWORD:-}
+      TOPIC_DATA: ${TOPIC_DATA:-data/1234/factory/task1//1}
+      TOPIC_CMD: ${TOPIC_CMD:-cmd/1234/factory/task1//1}
+      GROUP_NAME: ${GROUP_NAME:-data1}
+      SEND_COUNTER: ${SEND_COUNTER:-true}
+      SEND_INTERVAL: ${SEND_INTERVAL:-5}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-cbox_db}
+      DB_USER: ${DB_USER:-cbox}
+      DB_PASSWORD: ${DB_PASSWORD}
