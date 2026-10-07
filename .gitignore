@@ -1,0 +1,13 @@
+# secrets
+.env
+*.env
+!.env.example
+
+# runtime data
+data/
+pgdata/
+
+# python
+__pycache__/
+*.pyc
+.venv/
